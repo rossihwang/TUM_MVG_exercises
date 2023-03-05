@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<annotations>
+  <version>1.1</version>
+  <meta>
+    <task>
+      <id>96497</id>
+      <name>4points</name>
+      <size>2</size>
+      <mode>annotation</mode>
+      <overlap>0</overlap>
+      <bugtracker></bugtracker>
+      <created>2023-03-05 13:37:42.835182+00:00</created>
+      <updated>2023-03-05 13:42:06.916309+00:00</updated>
+      <subset>default</subset>
+      <start_frame>0</start_frame>
+      <stop_frame>1</stop_frame>
+      <frame_filter></frame_filter>
+      <segments>
+        <segment>
+          <id>96692</id>
+          <start>0</start>
+          <stop>1</stop>
+          <url>https://app.cvat.ai/api/jobs/96692</url>
+        </segment>
+      </segments>
+      <owner>
+        <username>rossi</username>
+        <email>rossihwang@gmail.com</email>
+      </owner>
+      <assignee></assignee>
+      <labels>
+        <label>
+          <name>left</name>
+          <color>#8a6d35</color>
+          <type>any</type>
+          <attributes>
+          </attributes>
+        </label>
+        <label>
+          <name>right</name>
+          <color>#15a957</color>
+          <type>any</type>
+          <attributes>
+          </attributes>
+        </label>
+      </labels>
+    </task>
+    <dumped>2023-03-05 13:42:34.431416+00:00</dumped>
+  </meta>
+  <image id="0" name="left_image.png" width="640" height="480">
+    <points label="left" source="manual" occluded="0" points="331.10,166.90;384.20,166.60;342.70,198.20;388.70,183.90" z_order="0">
+    </points>
+  </image>
+  <image id="1" name="right_image.png" width="640" height="480">
+    <points label="right" source="manual" occluded="0" points="310.70,166.90;363.90,166.80;323.30,198.00;369.20,184.00" z_order="0">
+    </points>
+  </image>
+</annotations>

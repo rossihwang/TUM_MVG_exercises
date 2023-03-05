@@ -1,0 +1,6 @@
+left_camera: 
+  xyz: 0.0, 0.0, 0.5
+  RPY: 0, 0, 0
+right_camera: 
+  xyz: 0.0, -0.1, 0.5
+  RPY: 0, 0, 0

@@ -137,6 +137,7 @@ def generate_rotation_matrix():
     m = np.random.rand(3, 3)
     q, r = np.linalg.qr(m)
     assert np.allclose(q @ q.T, np.eye(3))
+    assert np.abs(np.linalg.det(q) - 1.0) < 1e-5
 
     return q
 

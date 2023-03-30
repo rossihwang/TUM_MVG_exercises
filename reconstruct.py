@@ -3,23 +3,17 @@ import cv2
 
 GT_t = np.array([0.1, -0.1, 0.1])
 GT_R = np.eye(3)
-
+GT_X_DIST = 0.1 # m
 
 def sym_skew_m(t): return np.array(
     [0, -t[2], t[1], t[2], 0, -t[0], -t[1], t[0], 0]).reshape(3, 3)
 
-
 GT_t_hat = sym_skew_m(GT_t)
-
 GT_E = GT_t_hat @ GT_R
 
 d = 1
-n = np.array([0, 0, -1])
+n = np.array([0, 0, 1])
 GT_H = GT_R + np.outer(GT_t, n)
-
-print(f"{GT_t_hat=}")
-print(f"{GT_E=}")
-print(f"{GT_H=}")
 
 # Manual labling data
 CORR_PNT_4_L = np.array(
@@ -33,37 +27,39 @@ CORR_PNT_8_R = np.array([123.40, 197.00, 411.70, 196.60, 190.60, 211.80, 380.20,
 K = np.array([530.4669406576809, 0.0, 320.5, 0.0,
              530.4669406576809, 240.5, 0.0, 0.0, 1.0]).reshape(3, 3)
 
-
-def recover_P(p_l, p_r, R, t_hat):
-    print(p_l, p_r)
-    P_l = p_l.reshape(-1, 1)
-    t = np.array([t_hat[2, 1], t_hat[0, 2], t_hat[1, 0]])
-    P_r = np.linalg.inv(R) @ (p_r - t).reshape(-1, 1)
-    return P_l, P_r
-
-
 def triangulate(kp1, kp2, P1, P2):
-    A = np.vstack([
-        kp1[1] * P1[2, :] - P1[1, :],
-        P1[0, :] - kp1[0] * P1[2, :],
-        kp2[1] * P2[2, :] - P2[1, :],
-        P2[0, :] - kp2[0] * P2[2, :]
-    ])
+    # A = np.vstack([
+    #     kp1[1] * P1[2, :] - P1[1, :],
+    #     P1[0, :] - kp1[0] * P1[2, :],
+    #     kp2[1] * P2[2, :] - P2[1, :],
+    #     P2[0, :] - kp2[0] * P2[2, :]
+    #     ## orbslam2
+    #     # kp1[0] * P1[2, :] - P1[0, :],
+    #     # kp1[1] * P1[2, :] - P1[1, :],
+    #     # kp2[0] * P2[2, :] - P2[0, :],
+    #     # kp2[1] * P2[2, :] - P2[1, :],
+    # ])
+    A = sym_skew_m(kp1) @ P1
+    A = np.vstack([A, sym_skew_m(kp2) @ P2])
+    # print(f"{A}")
+    # assert(A.shape == (4, 4)) # A is rank 4
     u, s, vh = np.linalg.svd(A)
-    return vh.T[:, -1] / vh.T[:, -1][-1]
-
+    x3d = vh[-1, :]
+    # print(f"{A @ x3d.reshape(-1, 1)=}")
+    return x3d / x3d[-1]
 
 def check_rt(R, t, point1, point2):
     P1 = np.hstack([K, np.zeros((3, 1))])  # 3 * 4
     P2 = np.zeros((3, 4))
-    P2[:, :3] = R
-    P2[:, -1] = t.flatten()
-    P2 = K @ P2
+    P2[:, :3] = np.eye(3)
+    P2[:, 3] = -t.flatten()  # FIXME: is it right?
+    # print(f"{P2=}")
+    P2 = K @ R.T @ P2
 
     # print(f"{P1=}\n{P2=}")
 
-    o1 = np.zeros((3, 1))
-    o2 = -R.T @ t
+    # o1 = np.zeros((3, 1))  # left camera center
+    # o2 = -R.T @ t.reshape(3, 1)  # right camera center in left camera coordinate
 
     score = 0
 
@@ -72,127 +68,111 @@ def check_rt(R, t, point1, point2):
     for p1, p2 in zip(point1, point2):
         # Check visibility constraints and low parallax
         p3d_c1 = triangulate(p1, p2, P1, P2)
-        # print(p3d_c1.shape)
-        normal1 = p3d_c1[:3] - o1.flatten()
-        dist1 = np.linalg.norm(normal1)
-        # print(f"{normal1=} {dist1=}")
+        # p3d_c1 = cv2.triangulatePoints(P1, P2, p1[:2], p2[:2]).flatten()
+        p3d_c1 /= p3d_c1[-1]
+        # print(f"{p3d_c1=}")
+        # normal1 = p3d_c1[:3] - o1.flatten()
+        # dist1 = np.linalg.norm(normal1)
+        # # print(f"{normal1=} {dist1=}")
 
-        normal2 = p3d_c1[:3] - o2.flatten()
-        dist2 = np.linalg.norm(normal2)
-        # print(f"{dist1=} {dist2=}")
+        # normal2 = p3d_c1[:3] - o2.flatten()
+        # dist2 = np.linalg.norm(normal2)
+        # # print(f"{dist1=} {dist2=}")
 
-        cos_parallax = np.inner(normal1, normal2) / (dist1 * dist2)
-        # print(cos_parallax)
+        # cos_parallax = np.inner(normal1, normal2) / (dist1 * dist2)
+        # # print(cos_parallax)
 
-        if p3d_c1[2] < 0 and cos_parallax < 0.99998:
+        # print(f"{cos_parallax=}")
+        if p3d_c1[2] <= 0: # and cos_parallax < 0.99998:
             continue
 
-        p3d_c2 = R @ p3d_c1[:3].reshape(3, -1) + t
-
-        if p3d_c2[2] < 0 and cos_parallax < 0.99998:
+        p3d_c2 = (R @ p3d_c1[:3].reshape(3, -1) + t.reshape(-1, 1)).flatten()
+        # print(f"{p3d_c2=}")
+        if p3d_c2[2] <= 0: # and cos_parallax < 0.99998:
             continue
 
         # Check reprojection error
-        p3d_c1_proj = K[:2, :2] @ p3d_c1[:2] / p3d_c1[2] + K[:2, -1]
+        p3d_c1_proj = K[:2, :2] @ (p3d_c1[:2] / p3d_c1[2]) + K[:2, -1]
         square_error1 = np.square(np.linalg.norm(p3d_c1_proj - p1[:2]))
 
-        p3d_c2_proj = K[:2, :2] @ p3d_c2[:2] / p3d_c2[2] + K[:2, -1]
+        p3d_c2_proj = K[:2, :2] @ (p3d_c2[:2] / p3d_c2[2]) + K[:2, -1]
         square_error2 = np.square(np.linalg.norm(p3d_c2_proj - p2[:2]))
 
-        print(f"{square_error1=}, {square_error2=}")
+        # print(f"{square_error1=}, {square_error2=}")
 
-        score += 1
+        score += (square_error1 + square_error2)
         p3d_c1s.append(p3d_c1)
 
     return score, p3d_c1s
 
 
-def eight_points_method():
+def test_eight_points_method():
     # Compute calibrated points
 
     homo_8_l = np.hstack([CORR_PNT_8_L, np.ones((CORR_PNT_8_L.shape[0], 1))])
     homo_8_r = np.hstack([CORR_PNT_8_R, np.ones((CORR_PNT_8_R.shape[0], 1))])
-    # print(f"{homo_8_l=}, {homo_8_r=}")
-    K_inv = np.linalg.inv(K)
 
-    norm_homo_8_l = (K_inv @ homo_8_l.T).T
-    norm_homo_8_r = (K_inv @ homo_8_r.T).T
+    norm_homo_8_l = (homo_8_l[:, :2] - K[:2, -1]) / K[0, 0]
+    norm_homo_8_r = (homo_8_r[:, :2] - K[:2, -1]) / K[0, 0]
+    norm_homo_8_l = np.hstack([norm_homo_8_l, np.ones((CORR_PNT_8_L.shape[0], 1))])
+    norm_homo_8_r = np.hstack([norm_homo_8_r, np.ones((CORR_PNT_8_R.shape[0], 1))])
 
     # print(f"{norm_homo_8_l=}, {norm_homo_8_r=}")
 
-    a = np.kron(norm_homo_8_l[0, :], norm_homo_8_r[0, :])
+    A = np.kron(norm_homo_8_r[0, :], norm_homo_8_l[0, :])
     for i in range(1, 8):
-        a = np.vstack([a, np.kron(norm_homo_8_l[i, :], norm_homo_8_r[i, :])])
-    print(f"{a=}, {a.shape=}")
+        A = np.vstack([A, np.kron(norm_homo_8_r[i, :], norm_homo_8_l[i, :])])
+    # print(f"{A=}")
+    assert(A.shape == (8, 9))
 
     # Compute essential matrix
-    u, s, vh = np.linalg.svd(a)
-    # print(u, s, vh)
-    # print(f"{vh.shape}")
-    Es = vh.T[:, -1]
-    print(f"{Es=} {a @ Es=}")
+    u, s, vh = np.linalg.svd(A)
+    Es = vh[-1, :]
+    assert(np.sum(A @ Es) < 10e-5)
 
     E = Es.reshape(3, 3)  # Es is stacking from the column vector of E
     print(f"{E=}")
 
     # Check epipolar constrain
     for i in range(8):
+        assert(norm_homo_8_r[i, :].reshape(1, -1) @ E @ norm_homo_8_l[i, :].reshape(-1, 1) < 10e-5)
         print(
-            f"{norm_homo_8_l[i, :].reshape(1, -1) @ E @ norm_homo_8_r[i, :].reshape(-1, 1)=}")
+            f"Epipolar constraint: {norm_homo_8_r[i, :].reshape(1, -1) @ E @ norm_homo_8_l[i, :].reshape(-1, 1)}")
 
     # Decompose essential matrix
     u, s, vh = np.linalg.svd(E)
-    print(f"{s=}")
-    s = np.mean(s[:2])
-    # s = 1
+    # s = np.mean(s[:2])
+    s = 1
     sigma = np.diag([s, s, 0])
-    print(f"{sigma=}")
-    # _, s, _ = np.linalg.svd(E_proj)
-    print(f"{u @ sigma @ vh=}")
 
     # for i in range(8):
     #     print(f"{norm_homo_8_l[i, :].reshape(1, -1) @ E_proj @ norm_homo_8_r[i, :].reshape(-1, 1)=}")
 
     def Rz(y): return np.array(
         [np.cos(y), -np.sin(y), 0, np.sin(y), np.cos(y), 0, 0, 0, 1]).reshape(3, 3)
-    R1 = u @ Rz(np.deg2rad(90)).T @ vh
-    R2 = u @ Rz(np.deg2rad(-90)).T @ vh
-    t_hat1 = u @ Rz(np.deg2rad(90)) @ sigma @ u.T
-    t_hat2 = u @ Rz(np.deg2rad(-90)) @ sigma @ u.T
-    print(f"{t_hat1=}\n{t_hat2=}")
-    t1 = np.array([t_hat1[2, 1], t_hat1[0, 2], t_hat1[1, 0]])
-    t2 = np.array([t_hat2[2, 1], t_hat2[0, 2], t_hat2[1, 0]])
-    # t1 = u[:, -1]
-    # t2 = u[:, -1]
-    print(f"{R1=}\n {R2=}\n {t1=}\n {t2=}\n")
+    
+    R1 = u @ Rz(np.deg2rad(90)) @ vh
+    if np.linalg.det(R1) < 0:
+        R1 = -R1
+    R2 = u @ Rz(np.deg2rad(-90)) @ vh
+    if np.linalg.det(R2) < 0:
+        R2 = -R2
+    t = u[:, -1]
+    t /= np.linalg.norm(t)
+    # print(f"{R1=}\n {R2=}\n {t=}\n")
 
-    # # Choose best relative pose(R, t)
-    # print(
-    #     f"R1, t1: {recover_P(norm_homo_8_l[0, :], norm_homo_8_r[0, :], R1, t_hat1)}")
-    # print(
-    #     f"R1, t2: {recover_P(norm_homo_8_l[0, :], norm_homo_8_r[0, :], R1, t_hat2)}")
-    # print(
-    #     f"R2, t1: {recover_P(norm_homo_8_l[0, :], norm_homo_8_r[0, :], R2, t_hat1)}")
-    # print(
-    #     f"R2, t2: {recover_P(norm_homo_8_l[0, :], norm_homo_8_r[0, :], R2, t_hat2)}")
-    Rs = [-R1, -R1, R2, R2]
-    ts = [t1, t2, t1, t2]
+    Rs = [R1, R2, R1, R2]
+    ts = [t, t, -t, -t]
 
+    results = {}
     for R, t in zip(Rs, ts):
-        P1 = np.hstack([K, np.zeros((3, 1))])  # 3 * 4
-        P2 = np.zeros((3, 4))
-        P2[:, :3] = R
-        P2[:, -1] = t.flatten()
-        # print(P2.shape, K.shape)
-        P2 = K @ P2
+        score, points = check_rt(R, t, norm_homo_8_l, norm_homo_8_r)
+        if 0 < score:
+            results[score] = [R, t]
 
-        print(f"{P1=}\n{P2=}")
+    return results[sorted(results)[0]]
 
-        for i in range(norm_homo_8_l.shape[0]):
-            print(check_rt(norm_homo_8_l[i, :], norm_homo_8_r[i, :], P1, P2))
-
-
-def four_points_method():
+def test_four_points_method():
     homo_4_l = np.hstack([CORR_PNT_4_L, np.ones((CORR_PNT_4_L.shape[0], 1))])
     homo_4_r = np.hstack((CORR_PNT_4_R, np.ones((CORR_PNT_4_R.shape[0], 1))))
 
@@ -204,27 +184,20 @@ def four_points_method():
     norm_homo_4_r = np.hstack(
         [norm_homo_4_r, np.ones((CORR_PNT_4_R.shape[0], 1))])
 
-    # a = np.kron(norm_homo_4_l[0, :], sym_skew_m(norm_homo_4_r[0, :]).T)
-    # for i in range(1, 4):
-    #     a = np.vstack(
-    #         [a, np.kron(norm_homo_4_l[i, :], sym_skew_m(norm_homo_4_r[i, :]).T)])
     a = np.array([])
     for i in range(4):
         x, y = norm_homo_4_l[i, :2]
         xp, yp = norm_homo_4_r[i, :2]
         a = np.append(a, [-x, -y, -1, 0, 0, 0, xp * x, xp * y, xp])
         a = np.append(a, [0, 0, 0, -x, -y, -1, yp * x, yp * y, yp])
-        print(a.shape)
     a = a.reshape(-1, 9)
-    # assert (a.shape == (12, 9))
 
-    print(f"{a=}")
+    # print(f"{a=}")
 
     _, _, vh = np.linalg.svd(a)
-    Hs = vh.T[:, -1]
+    Hs = vh[-1, :]
     assert (np.sum(a @ Hs) < 1e-5)
-    print(f"{a @ Hs=}")
-    print(f"{norm_homo_4_l}\n{norm_homo_4_r}")
+    # print(f"{a @ Hs=}")
 
     H = Hs.T.reshape(3, 3)
     H /= H[2, 2]
@@ -279,7 +252,7 @@ def four_points_method():
 
         tp = (d1 - d3) * np.array([x1s[i], 0, -x3s[i]]).reshape(-1, 1)
         t = u @ tp
-        ts.append(t / np.linalg.norm(t))  # FIXME: normalize?
+        ts.append(t.flatten() / np.linalg.norm(t))  # FIXME: normalize?
 
         npp = np.array([x1s[i], 0, x3s[i]]).reshape(-1, 1)
         n = vh.T @ npp
@@ -305,20 +278,25 @@ def four_points_method():
 
         tp = (d1 + d3) * np.array([x1s[i], 0, x3s[i]]).reshape(-1, 1)
         t = u @ tp
-        ts.append(t / np.linalg.norm(t))
+        ts.append(t.flatten() / np.linalg.norm(t))
 
         npp = np.array([x1s[i], 0, x3s[i]]).reshape(-1, 1)
         n = vh.T @ npp
         if n[2] < 0:
-            n = -n
+            n = -n # FIXME:
         ns.append(n)
 
-    print("Rs: ", Rs)
-    print("ts: ", ts)
-    print("ns: ", ns)
+    # print("Rs: ", Rs)
+    # print("ts: ", ts)
+    # print("ns: ", ns)
 
+    results = {}
     for R, t, n in zip(Rs, ts, ns):
-        print(f"score: {check_rt(R, t, norm_homo_4_l, norm_homo_4_r)}")
+        score, points = check_rt(R, t, norm_homo_4_l, norm_homo_4_r)
+        if 0 < score:
+            results[score] = [R, t]
+
+    return results[sorted(results)[0]]
 
 
 def decompose_essential():
@@ -345,6 +323,16 @@ def decompose_essential():
 
 
 if __name__ == "__main__":
-    # eight_points_method()
-    four_points_method()
+    R, t = test_eight_points_method()
+    scale = t[0] / GT_X_DIST
+    t /= scale
+    print(f"eight points result: {R=}\n{t=}")
+    
+    print("="*80)
+
+    R, t = test_four_points_method()
+    scale = t[0] / GT_X_DIST
+    t /= scale
+    print(f"four points results: {R=}\n{t=}")
+
     # decompose_essential()

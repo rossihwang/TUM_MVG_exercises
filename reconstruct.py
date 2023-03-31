@@ -106,15 +106,15 @@ def check_rt(R, t, point1, point2):
     return score, p3d_c1s
 
 
-def test_eight_points_method():
+def eight_points_method(keypoint_left, keypoint_right, k):
     # Compute calibrated points
 
-    homo_8_l = np.hstack([CORR_PNT_8_L, np.ones((CORR_PNT_8_L.shape[0], 1))])
-    homo_8_r = np.hstack([CORR_PNT_8_R, np.ones((CORR_PNT_8_R.shape[0], 1))])
+    homo_8_l = np.hstack([keypoint_left, np.ones((keypoint_left.shape[0], 1))])
+    homo_8_r = np.hstack([keypoint_right, np.ones((keypoint_right.shape[0], 1))])
 
-    norm_homo_8_l = (homo_8_l[:, :2] - K[:2, -1]) / K[0, 0]
-    norm_homo_8_r = (homo_8_r[:, :2] - K[:2, -1]) / K[0, 0]
-    norm_homo_8_l = np.hstack([norm_homo_8_l, np.ones((CORR_PNT_8_L.shape[0], 1))])
+    norm_homo_8_l = (homo_8_l[:, :2] - k[:2, -1]) / k[0, 0]
+    norm_homo_8_r = (homo_8_r[:, :2] - k[:2, -1]) / k[0, 0]
+    norm_homo_8_l = np.hstack([norm_homo_8_l, np.ones((keypoint_left.shape[0], 1))])
     norm_homo_8_r = np.hstack([norm_homo_8_r, np.ones((CORR_PNT_8_R.shape[0], 1))])
 
     # print(f"{norm_homo_8_l=}, {norm_homo_8_r=}")
@@ -172,17 +172,17 @@ def test_eight_points_method():
 
     return results[sorted(results)[0]]
 
-def test_four_points_method():
-    homo_4_l = np.hstack([CORR_PNT_4_L, np.ones((CORR_PNT_4_L.shape[0], 1))])
-    homo_4_r = np.hstack((CORR_PNT_4_R, np.ones((CORR_PNT_4_R.shape[0], 1))))
+def four_points_method(keypoint_left, keypoint_right, k):
+    homo_4_l = np.hstack([keypoint_left, np.ones((keypoint_left.shape[0], 1))])
+    homo_4_r = np.hstack((keypoint_right, np.ones((keypoint_right.shape[0], 1))))
 
     # From image plane to normal plane
-    norm_homo_4_l = (homo_4_l[:, :2] - K[:2, -1]) / K[0, 0]
-    norm_homo_4_r = (homo_4_r[:, :2] - K[:2, -1]) / K[0, 0]
+    norm_homo_4_l = (homo_4_l[:, :2] - k[:2, -1]) / k[0, 0]
+    norm_homo_4_r = (homo_4_r[:, :2] - k[:2, -1]) / k[0, 0]
     norm_homo_4_l = np.hstack(
-        [norm_homo_4_l, np.ones((CORR_PNT_4_L.shape[0], 1))])
+        [norm_homo_4_l, np.ones((keypoint_left.shape[0], 1))])
     norm_homo_4_r = np.hstack(
-        [norm_homo_4_r, np.ones((CORR_PNT_4_R.shape[0], 1))])
+        [norm_homo_4_r, np.ones((keypoint_right.shape[0], 1))])
 
     a = np.array([])
     for i in range(4):
@@ -321,16 +321,23 @@ def decompose_essential():
     t2 = np.array([t_hat2[2, 1], t_hat2[0, 2], t_hat2[1, 0]])
     print(f"{R1=}\n{R2=}\n{t1=}\n{t2=}\n")
 
+def test_eight_points_method():
+    R, t = eight_points_method(CORR_PNT_8_L, CORR_PNT_8_R, K)
+    assert(np.sum(R - GT_R) < 10e-5 and np.sum(t - GT_t) < 10e-5)
+
+def test_four_points_method():
+    R, t = four_points_method(CORR_PNT_4_L, CORR_PNT_4_R, K)
+    assert(np.sum(R - GT_R) < 10e-5 and np.sum(t - GT_t) < 10e-5)
 
 if __name__ == "__main__":
-    R, t = test_eight_points_method()
+    R, t = eight_points_method(CORR_PNT_8_L, CORR_PNT_8_R, K)
     scale = t[0] / GT_X_DIST
     t /= scale
     print(f"eight points result: {R=}\n{t=}")
     
     print("="*80)
 
-    R, t = test_four_points_method()
+    R, t = four_points_method(CORR_PNT_4_L, CORR_PNT_4_R, K)
     scale = t[0] / GT_X_DIST
     t /= scale
     print(f"four points results: {R=}\n{t=}")

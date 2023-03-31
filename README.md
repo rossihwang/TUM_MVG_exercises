@@ -2,3 +2,4 @@
 Some exercises for Multiple View Geometry course of TUM
 
 - Chapter 2 exercise: se3.py
+- Chapter 5 exercise: reconstruct.py

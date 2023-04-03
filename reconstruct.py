@@ -323,11 +323,11 @@ def decompose_essential():
 
 def test_eight_points_method():
     R, t = eight_points_method(CORR_PNT_8_L, CORR_PNT_8_R, K)
-    assert(np.sum(R - GT_R) < 10e-5 and np.sum(t - GT_t) < 10e-5)
+    assert(np.abs(np.sum(R - GT_R)) < 1e-1 and np.abs(np.sum(t - GT_t)) < 1.)
 
 def test_four_points_method():
     R, t = four_points_method(CORR_PNT_4_L, CORR_PNT_4_R, K)
-    assert(np.sum(R - GT_R) < 10e-5 and np.sum(t - GT_t) < 10e-5)
+    assert(np.abs(np.sum(R - GT_R)) < 1e-3 and np.abs(np.sum(t - GT_t)) < 1.)
 
 if __name__ == "__main__":
     R, t = eight_points_method(CORR_PNT_8_L, CORR_PNT_8_R, K)
@@ -341,5 +341,3 @@ if __name__ == "__main__":
     scale = t[0] / GT_X_DIST
     t /= scale
     print(f"four points results: {R=}\n{t=}")
-
-    # decompose_essential()

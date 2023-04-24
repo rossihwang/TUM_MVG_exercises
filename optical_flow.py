@@ -46,7 +46,7 @@ def compute_harris_response(frame: np.ndarray, block_size: tuple):
 
 
 def is_good_to_track(response, point):
-    HANDCRAFT_THRESH = 200  # 130
+    HANDCRAFT_THRESH = 240
     if HANDCRAFT_THRESH < response[point[1], point[0]]:
         return True
     return False
@@ -55,36 +55,65 @@ def is_good_to_track(response, point):
 def lk_optical_flow(frame1: np.ndarray, frame2: np.ndarray, points: list, block_size: tuple):
     global Ix, Iy
     global Ixx, Iyy, Ixy
-    vs = []
-    ps = []
+    vs = np.array([])
 
-    Ixx_block_sum = cv2.boxFilter(Ixx, cv2.CV_16S, block_size, normalize=True)
-    Iyy_block_sum = cv2.boxFilter(Iyy, cv2.CV_16S, block_size, normalize=True)
-    Ixy_block_sum = cv2.boxFilter(Ixy, cv2.CV_16S, block_size, normalize=True)
-    frame1 = cv2.GaussianBlur(frame1, (3, 3), 10)  # denoise
-    frame2 = cv2.GaussianBlur(frame2, (3, 3), 10)
+    # Ixx_block_sum = cv2.boxFilter(Ixx, cv2.CV_16S, block_size, normalize=True)
+    # Iyy_block_sum = cv2.boxFilter(Iyy, cv2.CV_16S, block_size, normalize=True)
+    # Ixy_block_sum = cv2.boxFilter(Ixy, cv2.CV_16S, block_size, normalize=True)
+    # frame1 = cv2.GaussianBlur(frame1, block_size, 10)  # denoise
+    # frame2 = cv2.GaussianBlur(frame2, block_size, 10)
     It = frame2.astype(np.int16) - frame1.astype(np.int16)
 
-    # Ixt = np.abs(Ix * It)
-    # Iyt = np.abs(Iy * It)
-    Ixt = Ix * It
-    Iyt = Iy * It
-    Ixt_block_sum = cv2.boxFilter(Ixt, cv2.CV_16S, block_size, normalize=True)
-    Iyt_block_sum = cv2.boxFilter(Iyt, cv2.CV_16S, block_size, normalize=True)
+    # Ixt = Ix * It
+    # Iyt = Iy * It
+    # Ixt_block_sum = cv2.boxFilter(Ixt, cv2.CV_16S, block_size, normalize=True)
+    # Iyt_block_sum = cv2.boxFilter(Iyt, cv2.CV_16S, block_size, normalize=True)
 
-    for p in points:
-        M = np.array([Ixx_block_sum[p[1], p[0]], Ixy_block_sum[p[1], p[0]],
-                      Ixy_block_sum[p[1], p[0]], Iyy_block_sum[p[1], p[0]]]).reshape(2, 2)
+    # for p in points:
+    #     M = np.array([Ixx_block_sum[p[1], p[0]], Ixy_block_sum[p[1], p[0]],
+    #                   Ixy_block_sum[p[1], p[0]], Iyy_block_sum[p[1], p[0]]]).reshape(2, 2)
 
-        N = np.array([Ixt_block_sum[p[1], p[0]],
-                     Iyt_block_sum[p[1], p[0]]]).reshape(2, 1)
-        # print(f"{M=}\n{N=}")
-        HANDCRAFT_THRESH = 10
-        if HANDCRAFT_THRESH < np.linalg.det(M):
-            v = -np.linalg.inv(M) @ N * 10
-            vs.append(v.flatten())
-            ps.append(p)
-    return ps, vs
+    #     N = np.array([Ixt_block_sum[p[1], p[0]],
+    #                  Iyt_block_sum[p[1], p[0]]]).reshape(2, 1)
+     
+    #     v = -np.linalg.inv(M) @ N
+    #     vs = np.append(vs, v.flatten() + np.array([p[0], p[1]]))
+
+    # half_win = (block_size[0] - 1) // 2
+    # eps = 1e-3
+    # max_iter = 10
+    # for p in points:
+    #     x, y = p
+    #     Ix_win = Ix[y - half_win:y + half_win + 1, x - half_win:x + half_win + 1]
+    #     Iy_win = Iy[y - half_win:y + half_win + 1, x - half_win:x + half_win + 1]
+    #     It_win = It[y - half_win:y + half_win + 1, x - half_win:x + half_win + 1]
+
+    #     A = np.vstack([Ix_win.flatten(), Iy_win.flatten()]).T
+    #     b = -It_win.flatten()
+        
+    #     v = np.zeros(2)
+    #     for _ in range(max_iter):
+    #         v_new = np.linalg.inv(A.T @ A + eps * np.eye(2)) @ A.T @ b
+    #         if np.linalg.norm(v_new - v) < eps:
+    #             break
+    #         v = v_new
+    #     vs = np.append(vs, v_new)
+
+
+    # vs = vs.reshape(-1, 2)
+
+
+    # print(type(p0))
+
+    # Implement with opencv
+    p0 = np.array(points, dtype=np.float32).reshape(-1, 1, 2)
+    p1, st, err = cv2.calcOpticalFlowPyrLK(frame1, frame2, p0, None)
+    
+    new_pts = p1.reshape(-1, 2)
+    old_pts = p0.reshape(-1, 2)
+    vs = new_pts - old_pts
+
+    return vs
 
 
 def main():
@@ -108,8 +137,8 @@ def main():
             frame_show_kp = cv2.circle(
                 frame_show_kp, point, radius=1, thickness=2, color=100)
             ps.append(point)
-    ps, vs = lk_optical_flow(frame1, frame2, ps, (15, 15))
-    print(vs)
+    vs = lk_optical_flow(frame1, frame2, ps, (7, 7))
+    # print(vs)
 
     for p, v in zip(ps, vs):
         cv2.arrowedLine(frame_show_of, p, (int(
